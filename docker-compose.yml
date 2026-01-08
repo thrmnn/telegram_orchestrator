@@ -1,0 +1,114 @@
+version: '3.8'
+
+services:
+  orchestrator:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: telegram-orchestrator
+    restart: unless-stopped
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - TELEGRAM_AUTHORIZED_CHAT_IDS=${TELEGRAM_AUTHORIZED_CHAT_IDS}
+      - DATABASE_URL=postgresql+asyncpg://orchestrator:orchestrator@postgres:5432/orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - GITHUB_REPO=${GITHUB_REPO}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./config:/app/config:ro
+      - ./workspaces:/app/workspaces
+      - ./logs:/app/logs
+      - orchestrator-data:/app/data
+    depends_on:
+      postgres:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    networks:
+      - orchestrator-net
+
+  postgres:
+    image: postgres:15-alpine
+    container_name: orchestrator-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=orchestrator
+      - POSTGRES_PASSWORD=orchestrator
+      - POSTGRES_DB=orchestrator
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U orchestrator"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-net
+
+  redis:
+    image: redis:7-alpine
+    container_name: orchestrator-redis
+    restart: unless-stopped
+    command: redis-server --appendonly yes
+    volumes:
+      - redis-data:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+    networks:
+      - orchestrator-net
+
+  # Optional: Celery worker for background tasks
+  celery-worker:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orchestrator-celery
+    restart: unless-stopped
+    command: celery -A celery_app worker --loglevel=info
+    environment:
+      - TELEGRAM_BOT_TOKEN=${TELEGRAM_BOT_TOKEN}
+      - DATABASE_URL=postgresql+asyncpg://orchestrator:orchestrator@postgres:5432/orchestrator
+      - REDIS_URL=redis://redis:6379/0
+      - GITHUB_TOKEN=${GITHUB_TOKEN}
+      - ANTHROPIC_API_KEY=${ANTHROPIC_API_KEY}
+    volumes:
+      - ./config:/app/config:ro
+      - ./workspaces:/app/workspaces
+    depends_on:
+      - postgres
+      - redis
+    networks:
+      - orchestrator-net
+    profiles:
+      - celery
+
+  # Optional: Celery beat for scheduled tasks
+  celery-beat:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: orchestrator-celery-beat
+    restart: unless-stopped
+    command: celery -A celery_app beat --loglevel=info
+    environment:
+      - DATABASE_URL=postgresql+asyncpg://orchestrator:orchestrator@postgres:5432/orchestrator
+      - REDIS_URL=redis://redis:6379/0
+    depends_on:
+      - redis
+    networks:
+      - orchestrator-net
+    profiles:
+      - celery
+
+volumes:
+  postgres-data:
+  redis-data:
+  orchestrator-data:
+
+networks:
+  orchestrator-net:
+    driver: bridge

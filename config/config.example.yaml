@@ -1,0 +1,45 @@
+# Telegram Orchestrator Configuration
+# Copy this file to config.yaml and fill in your values
+
+telegram:
+  bot_token: "YOUR_TELEGRAM_BOT_TOKEN"
+  authorized_chat_ids:
+    - 123456789  # Your Telegram user ID
+
+database:
+  url: "sqlite+aiosqlite:///./orchestrator.db"
+  # For PostgreSQL:
+  # url: "postgresql+asyncpg://user:password@localhost:5432/orchestrator"
+
+redis:
+  url: "redis://localhost:6379/0"
+
+agent:
+  count: 3
+  workspace_base: "./workspaces"
+  timeout_seconds: 3600
+
+github:
+  token: "YOUR_GITHUB_TOKEN"
+  repo: "owner/repository"
+  base_branch: "main"
+
+orchestration:
+  autonomy_mode: "balanced"  # full-auto, balanced, supervised
+  max_parallel_tasks: 3
+  decision_timeout_seconds: 3600
+
+budget:
+  daily_budget_usd: 50.0
+  max_tokens_per_task: 100000
+
+notification:
+  notify_on_task_start: true
+  notify_on_task_complete: true
+  notify_on_error: true
+  notify_on_pr_ready: true
+  daily_digest_hour: 18
+
+logging:
+  log_level: "INFO"
+  log_file: "./logs/orchestrator.log"
